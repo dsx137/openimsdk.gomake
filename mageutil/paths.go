@@ -12,7 +12,7 @@ const (
 	DeploymentType      = "DEPLOYMENT_TYPE"
 	KUBERNETES          = "kubernetes"
 
-	// Directory name constants
+	// Directory command constants
 	ConfigDir    = "config"
 	OutputDir    = "_output"
 	SrcDir       = "cmd"
@@ -46,11 +46,11 @@ type PathConfig struct {
 
 type PathOptions struct {
 	RootDir   *string // Custom root directory, default is current working directory(./)
-	OutputDir *string // Custom output directory name, default is "_output"
-	ConfigDir *string // Custom config directory name, default is "config"
+	OutputDir *string // Custom output directory command, default is "_output"
+	ConfigDir *string // Custom config directory command, default is "config"
 
-	SrcDir   *string // Custom cmd source directory name, default is "cmd"
-	ToolsDir *string // Custom tools source directory name, default is "tools"
+	SrcDir   *string // Custom cmd source directory command, default is "cmd"
+	ToolsDir *string // Custom tools source directory command, default is "tools"
 }
 
 var Paths *PathConfig

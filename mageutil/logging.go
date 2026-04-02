@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -19,6 +21,15 @@ const (
 
 const defaultTimeFmt = "[2006-01-02 15:04:05 MST]"
 
+const defaultLogFileName = "gomake.log"
+
+var (
+	logFileStateMu sync.Mutex
+	logWriteMu     sync.Mutex
+	sharedLogFile  *os.File
+	sharedLogPath  string
+)
+
 type PrintOptions struct {
 	Writer    io.Writer
 	Color     string
@@ -30,10 +41,6 @@ type PrintOptions struct {
 }
 
 func Print(opt PrintOptions) (int, error) {
-	w := opt.Writer
-	if w == nil {
-		w = os.Stdout
-	}
 	tf := opt.TimeFmt
 	if tf == "" {
 		tf = defaultTimeFmt
@@ -45,36 +52,120 @@ func Print(opt PrintOptions) (int, error) {
 	)
 
 	WithActiveSpinnerPaused(func() {
-		var b strings.Builder
-
-		if opt.WithTime {
-			ts := time.Now().Format(tf)
-			if opt.TwoLine {
-				b.WriteString(ts)
-				b.WriteByte('\n')
-			} else {
-				b.WriteString(ts)
-				b.WriteByte(' ')
-			}
+		consoleWriter := opt.Writer
+		if consoleWriter == nil {
+			consoleWriter = os.Stdout
 		}
 
-		if opt.Color != "" {
-			b.WriteString(opt.Color)
-		}
-		b.WriteString(opt.Message)
-		if opt.Color != "" {
-			b.WriteString(ColorReset)
-		}
+		consoleMessage := formatPrintMessage(opt, tf, true)
+		fileMessage := formatPrintMessage(opt, tf, false)
 
-		if !opt.NoNewLine {
-			b.WriteByte('\n')
-		}
+		logWriteMu.Lock()
+		defer logWriteMu.Unlock()
 
-		nLocal, errLocal := io.WriteString(w, b.String())
+		nLocal, errLocal := io.WriteString(consoleWriter, consoleMessage)
 		n, err = nLocal, errLocal
+
+		logFile, logErr := getSharedLogFile()
+		if logErr != nil {
+			return
+		}
+
+		if _, logErr = io.WriteString(logFile, fileMessage); err == nil && logErr != nil {
+			err = logErr
+		}
 	})
 
 	return n, err
+}
+
+func formatPrintMessage(opt PrintOptions, timeFmt string, withColor bool) string {
+	var b strings.Builder
+
+	if opt.WithTime {
+		ts := time.Now().Format(timeFmt)
+		if opt.TwoLine {
+			b.WriteString(ts)
+			b.WriteByte('\n')
+		} else {
+			b.WriteString(ts)
+			b.WriteByte(' ')
+		}
+	}
+
+	if withColor && opt.Color != "" {
+		b.WriteString(opt.Color)
+	}
+	b.WriteString(opt.Message)
+	if withColor && opt.Color != "" {
+		b.WriteString(ColorReset)
+	}
+
+	if !opt.NoNewLine {
+		b.WriteByte('\n')
+	}
+
+	return b.String()
+}
+
+func openDetachedCommandLogFile() (*os.File, error) {
+	path, err := logFilePath()
+	if err != nil {
+		return nil, err
+	}
+
+	logFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open log file %s: %w", path, err)
+	}
+	return logFile, nil
+}
+
+func getSharedLogFile() (*os.File, error) {
+	path, err := logFilePath()
+	if err != nil {
+		return nil, err
+	}
+
+	logFileStateMu.Lock()
+	defer logFileStateMu.Unlock()
+
+	if sharedLogFile != nil && sharedLogPath == path {
+		return sharedLogFile, nil
+	}
+
+	if sharedLogFile != nil {
+		_ = sharedLogFile.Close()
+		sharedLogFile = nil
+		sharedLogPath = ""
+	}
+
+	logFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open log file %s: %w", path, err)
+	}
+
+	sharedLogFile = logFile
+	sharedLogPath = path
+	return sharedLogFile, nil
+}
+
+func logFilePath() (string, error) {
+	if Paths == nil {
+		return "", fmt.Errorf("paths are not initialized")
+	}
+
+	logDir := strings.TrimSpace(Paths.OutputLogs)
+	if logDir == "" {
+		return "", fmt.Errorf("log directory is empty")
+	}
+
+	logDir = filepath.Clean(logDir)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create log directory %s: %w", logDir, err)
+	}
+
+	return filepath.Join(logDir, defaultLogFileName), nil
 }
 
 func PrintBlue(message string) {
@@ -92,36 +183,4 @@ func PrintYellow(message string) {
 
 func PrintRedNoTimeStamp(message string) {
 	_, _ = Print(PrintOptions{Color: ColorRed, Message: message, WithTime: false})
-}
-
-func PrintBlueTwoLine(message string) {
-	_, _ = Print(PrintOptions{Color: ColorBlue, Message: message, WithTime: true, TwoLine: true})
-}
-
-func PrintGreenTwoLine(message string) {
-	_, _ = Print(PrintOptions{Color: ColorGreen, Message: message, WithTime: true, TwoLine: true})
-}
-
-func PrintGreenNoTimeStamp(message string) {
-	_, _ = Print(PrintOptions{Color: ColorGreen, Message: message, WithTime: false})
-}
-
-func PrintRedToStdErr(a ...any) {
-	_, _ = Print(PrintOptions{
-		Writer:    os.Stderr,
-		Color:     ColorRed,
-		Message:   fmt.Sprint(a...),
-		WithTime:  false,
-		NoNewLine: true,
-	})
-}
-
-func PrintGreenToStdOut(a ...any) {
-	_, _ = Print(PrintOptions{
-		Writer:    os.Stdout,
-		Color:     ColorGreen,
-		Message:   fmt.Sprint(a...),
-		WithTime:  false,
-		NoNewLine: true,
-	})
 }

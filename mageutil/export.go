@@ -70,10 +70,9 @@ func ExportMageLauncherArchived(overrideMappingPaths map[string]string, exportOp
 			mageBinaryPath += ".exe"
 		}
 		PrintBlue(fmt.Sprintf("Compiling mage binary for %s: mage -compile %s", platform, mageBinaryPath))
-		cmd := exec.Command("mage", "-compile", mageBinaryPath, "-goos", targetOS, "-goarch", targetArch, "-ldflags", "-s -w")
-		cmd.Dir = Paths.Root
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		cmd := NewCmd("mage").
+			WithArgs("-compile", mageBinaryPath, "-goos", targetOS, "-goarch", targetArch, "-ldflags", "-s -w").
+			WithDir(Paths.Root)
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to compile mage for %s: %v", platform, err)
 		}
@@ -177,10 +176,11 @@ func GetAllRootFilesExcludeIgnore() ([]string, error) {
 		return nil, fmt.Errorf("root path is empty")
 	}
 
-	cmd := exec.Command("git", "ls-files", "-c", "--exclude-standard", "-z")
-	cmd.Dir = root
+	cmdOutput, err := NewCmd("git").
+		WithArgs("ls-files", "-c", "--exclude-standard", "-z").
+		WithDir(root).
+		Output()
 
-	output, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
@@ -190,7 +190,7 @@ func GetAllRootFilesExcludeIgnore() ([]string, error) {
 	}
 
 	relPaths := make([]string, 0)
-	for _, relPath := range strings.Split(string(output), "\x00") {
+	for _, relPath := range strings.Split(string(cmdOutput), "\x00") {
 		if relPath == "" {
 			continue
 		}

@@ -1,7 +1,7 @@
 package mageutil
 
 import (
-	"errors"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -9,28 +9,26 @@ import (
 	"strings"
 
 	"github.com/openimsdk/gomake/internal/priority"
+	"github.com/openimsdk/gomake/internal/util"
 )
 
 type Cmd struct {
-	name string
-	args []string
+	execCmd *exec.Cmd
 
 	env map[string]string
-	dir string
 
 	priority *priority.Level
 
-	stdin  io.Reader
-	stdout io.Writer
-	stderr io.Writer
+	stdoutBuf bytes.Buffer
+	stderrBuf bytes.Buffer
 }
 
-func NewCmd(name string) *Cmd {
-	return &Cmd{name: name}
+func NewCmd(command string) *Cmd {
+	return &Cmd{execCmd: exec.Command(command)}
 }
 
 func (c *Cmd) WithArgs(args ...string) *Cmd {
-	c.args = append([]string(nil), args...)
+	c.execCmd.Args = append(c.execCmd.Args, args...)
 	return c
 }
 
@@ -48,7 +46,7 @@ func (c *Cmd) WithEnv(env map[string]string) *Cmd {
 }
 
 func (c *Cmd) WithDir(dir string) *Cmd {
-	c.dir = strings.TrimSpace(dir)
+	c.execCmd.Dir = strings.TrimSpace(dir)
 	return c
 }
 
@@ -58,84 +56,73 @@ func (c *Cmd) WithPriority(priority priority.Level) *Cmd {
 }
 
 func (c *Cmd) WithStdin(stdin io.Reader) *Cmd {
-	c.stdin = stdin
+	c.execCmd.Stdin = stdin
 	return c
 }
 
 func (c *Cmd) WithStdout(stdout io.Writer) *Cmd {
-	c.stdout = stdout
+	if stdout == nil {
+		stdout = commandOutputWriter(os.Stdout, &c.stdoutBuf)
+	} else {
+		c.execCmd.Stdout = stdout
+	}
 	return c
 }
 
 func (c *Cmd) WithStderr(stderr io.Writer) *Cmd {
-	c.stderr = stderr
+	if stderr == nil {
+		stderr = commandOutputWriter(os.Stderr, &c.stderrBuf)
+	} else {
+		c.execCmd.Stderr = stderr
+	}
 	return c
 }
 
-func (c *Cmd) WithStdio(stdin io.Reader, stdout, stderr io.Writer) *Cmd {
-	c.stdin = stdin
-	c.stdout = stdout
-	c.stderr = stderr
-	return c
-}
+func (c *Cmd) Start() error {
+	c.execCmd.Env = append(os.Environ(), util.FlattenEnvs(c.env)...)
 
-func (c *Cmd) Run() error {
-	if strings.TrimSpace(c.name) == "" {
-		return errors.New("command is empty")
-	}
-
-	execCmd := exec.Command(c.name, c.args...)
-	execCmd.Env = append(os.Environ(), flattenEnv(c.env)...)
-	if c.dir != "" {
-		execCmd.Dir = c.dir
-	}
-
-	stdin, stdout, stderr := c.resolveIO()
-	execCmd.Stdin = stdin
-	execCmd.Stdout = stdout
-	execCmd.Stderr = stderr
-
-	if err := execCmd.Start(); err != nil {
+	if err := c.execCmd.Start(); err != nil {
 		return err
 	}
 
-	c.applyPriority(execCmd.Process.Pid)
-	return execCmd.Wait()
+	if c.priority != nil && c.execCmd.Process != nil {
+		if err := priority.Set(c.execCmd.Process.Pid, *c.priority); err != nil {
+			PrintYellow(fmt.Sprintf("Failed to set priority for PID %d: %v", c.execCmd.Process.Pid, err))
+		}
+	}
+
+	return nil
 }
 
-func (c *Cmd) resolveIO() (io.Reader, io.Writer, io.Writer) {
-	stdin := c.stdin
-
-	stdout := c.stdout
-	if stdout == nil {
-		stdout = os.Stdout
-	}
-
-	stderr := c.stderr
-	if stderr == nil {
-		stderr = os.Stderr
-	}
-
-	return stdin, stdout, stderr
+func (c *Cmd) Wait() error {
+	return c.execCmd.Wait()
 }
 
-func (c *Cmd) applyPriority(pid int) {
-	if c.priority == nil {
-		return
+func (c *Cmd) Run() error {
+	err := c.Start()
+	if err != nil {
+		return err
 	}
-	if err := priority.Set(pid, *c.priority); err != nil {
-		PrintYellow(fmt.Sprintf("Failed to set priority for PID %d: %v", pid, err))
-	}
+
+	return c.Wait()
 }
 
-func flattenEnv(env map[string]string) []string {
-	if len(env) == 0 {
-		return nil
-	}
+func (c *Cmd) String() string {
+	return c.execCmd.String()
+}
 
-	flattened := make([]string, 0, len(env))
-	for k, v := range env {
-		flattened = append(flattened, k+"="+v)
+func (c *Cmd) Output() ([]byte, error) {
+	err := c.Run()
+	dst := make([]byte, len(c.stdoutBuf.Bytes()))
+	copy(dst, c.stdoutBuf.Bytes())
+	return dst, err
+}
+
+func commandOutputWriter(writers ...io.Writer) io.Writer {
+	logFile, err := getSharedLogFile()
+	if err != nil {
+		PrintYellow(fmt.Sprintf("Warning: failed to open log file for command output: %v", err))
+		return io.MultiWriter(writers...)
 	}
-	return flattened
+	return io.MultiWriter(append(writers, logFile)...)
 }

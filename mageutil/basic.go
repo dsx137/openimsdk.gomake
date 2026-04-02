@@ -167,10 +167,10 @@ func isExecutableFile(filePath string) bool {
 
 func Build(binaries []string, pathOpts *PathOptions, buildOpt *BuildOptions) {
 	resolvedBuildOpt := ResolveBuildOptions(buildOpt, &BuildOptions{
-		CgoEnabled: util.ResolveEnvOption[string]("CGO_ENABLED"),
-		Release:    util.ResolveEnvOption[bool]("RELEASE"),
-		Compress:   util.ResolveEnvOption[bool]("COMPRESS"),
-		Platforms:  util.ResolveEnvOption[[]string]("PLATFORMS"),
+		CgoEnabled: util.GetEnvWithNoErr[string]("CGO_ENABLED"),
+		Release:    util.GetEnvWithNoErr[bool]("RELEASE"),
+		Compress:   util.GetEnvWithNoErr[bool]("COMPRESS"),
+		Platforms:  util.GetEnvWithNoErr[[]string]("PLATFORMS"),
 	})
 
 	if _, err := os.Stat(StartConfigFile); err == nil {

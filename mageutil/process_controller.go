@@ -3,7 +3,6 @@ package mageutil
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -49,14 +48,20 @@ func StartBinaries(specificBinaries ...string) error {
 				configPath = Paths.K8sConfig
 			}
 			args := []string{"-i", strconv.Itoa(i), "-c", configPath}
-			cmd := exec.Command(binFullPath, args...)
+			cmd := NewCmd(binFullPath).WithArgs(args...)
 			PrintBlue(fmt.Sprintf("Starting %s", cmd.String()))
-			cmd.Dir = Paths.OutputHostBin
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
+			logFile, err := openDetachedCommandLogFile()
+			if err != nil {
+				return err
+			}
+			cmd.WithDir(Paths.OutputHostBin)
+			cmd.WithStdout(logFile)
+			cmd.WithStderr(logFile)
 			if err := cmd.Start(); err != nil {
+				_ = logFile.Close()
 				return fmt.Errorf("failed to start %s with args %v: %v", binFullPath, args, err)
 			}
+			_ = logFile.Close()
 		}
 	}
 	return nil
@@ -90,19 +95,23 @@ func StartTools(specificTools ...string) error {
 			configPath = Paths.K8sConfig
 		}
 
-		cmd := exec.Command(toolFullPath, "-c", configPath)
+		logFile, err := openDetachedCommandLogFile()
+		if err != nil {
+			return err
+		}
+		cmd := NewCmd(toolFullPath).
+			WithArgs("-c", configPath).
+			WithDir(Paths.OutputHostBinTools).
+			WithStdout(logFile).
+			WithStderr(logFile)
 		PrintBlue(fmt.Sprintf("Starting %s", cmd.String()))
-		cmd.Dir = Paths.OutputHostBinTools
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
 
-		if err := cmd.Start(); err != nil {
-			return fmt.Errorf("failed to start %s with error: %v", toolFullPath, err)
+		if err := cmd.Run(); err != nil {
+			_ = logFile.Close()
+			return fmt.Errorf("failed to run %s with error: %v", toolFullPath, err)
 		}
 
-		if err := cmd.Wait(); err != nil {
-			return fmt.Errorf("failed to execute %s with exit code: %v", toolFullPath, err)
-		}
+		_ = logFile.Close()
 		PrintGreen(fmt.Sprintf("Starting %s successfully", cmd.String()))
 	}
 	return nil

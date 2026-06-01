@@ -78,7 +78,9 @@ func ExportMageLauncherArchived(overrideMappingPaths map[string]string, exportOp
 		PrintBlue(fmt.Sprintf("Compiling mage binary for %s: mage -compile %s", platform, mageBinaryPath))
 		cmd := NewCmd("mage").
 			WithArgs("-compile", mageBinaryPath, "-goos", targetOS, "-goarch", targetArch, "-ldflags", "-s -w").
-			WithDir(Paths.Root)
+			WithDir(Paths.Root).
+			WithStdout(GetStdoutInnerLogWriter()).
+			WithStderr(GetStderrInnerLogWriter())
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to compile mage for %s: %v", platform, err)
 		}

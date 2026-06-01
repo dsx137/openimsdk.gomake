@@ -107,11 +107,11 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		PrintRed(fmt.Sprintf("Failed read directory %s: %v", sourceDir, err))
+		PrintErrRed(fmt.Sprintf("Failed read directory %s: %v", sourceDir, err))
 		return nil, err
 	} else if !info.IsDir() {
 		err := fmt.Errorf("%s is not dir", sourceDir)
-		PrintRed("Failed " + err.Error())
+		PrintErrRed("Failed " + err.Error())
 		return nil, err
 	}
 
@@ -123,7 +123,7 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 	outputDir := filepath.Join(outputBase, targetOS, targetArch)
 
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		PrintRed(fmt.Sprintf("Failed to create directory %s: %v", outputDir, err))
+		PrintErrRed(fmt.Sprintf("Failed to create directory %s: %v", outputDir, err))
 		return nil, err
 	}
 
@@ -199,7 +199,7 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 
 				relPath, err := filepath.Rel(goModDir, path)
 				if err != nil {
-					PrintRed(fmt.Sprintf("Failed to get relative path: %v", err))
+					PrintErrRed(fmt.Sprintf("Failed to get relative path: %v", err))
 					errCh <- err
 					return
 				}
@@ -220,11 +220,13 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 					WithDir(goModDir).
 					WithEnv(env).
 					WithPriority(priority.Low).
+					WithStdout(GetStdoutInnerLogWriter()).
+					WithStderr(GetStderrInnerLogWriter()).
 					Run()
 
 				if err != nil {
 					err = fmt.Errorf("failed to compile %s for %s: %w", dirName, platform, err)
-					PrintRed("Compilation aborted. " + err.Error())
+					PrintErrRed("Compilation aborted. " + err.Error())
 					errCh <- err
 					return
 				}
@@ -235,7 +237,9 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 					PrintBlue(fmt.Sprintf("Compressing %s with UPX...", outputFileName))
 					cmd := NewCmd("upx").
 						WithArgs("--lzma", outputPath).
-						WithPriority(priority.Low)
+						WithPriority(priority.Low).
+						WithStdout(GetStdoutInnerLogWriter()).
+						WithStderr(GetStderrInnerLogWriter())
 					if err := cmd.Run(); err != nil {
 						PrintYellow(fmt.Sprintf("UPX compression failed for %s (non-fatal): %v", outputFileName, err))
 					} else {
@@ -286,7 +290,7 @@ func createStartConfigYML(cmdDirs, toolsDirs []string) error {
 
 	err := os.WriteFile(configPath, []byte(content.String()), 0644)
 	if err != nil {
-		PrintRed("Failed to create start-config.yml: " + err.Error())
+		PrintErrRed("Failed to create start-config.yml: " + err.Error())
 		return err
 	}
 	PrintGreen("start-config.yml created successfully.")

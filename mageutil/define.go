@@ -27,14 +27,14 @@ type Config struct {
 func InitForSSC() error {
 	yamlFile, err := os.ReadFile(StartConfigFile)
 	if err != nil {
-		PrintRed("error reading YAML file: " + err.Error())
+		PrintErrRed("error reading YAML file: " + err.Error())
 		return fmt.Errorf("error reading YAML file: %w", err)
 	}
 
 	var config Config
 	err = yaml.Unmarshal(yamlFile, &config)
 	if err != nil {
-		PrintRed("error unmarshalling YAML: " + err.Error())
+		PrintErrRed("error unmarshalling YAML: " + err.Error())
 		return fmt.Errorf("error unmarshalling YAML: %w", err)
 	}
 

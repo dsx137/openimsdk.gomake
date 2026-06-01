@@ -16,8 +16,8 @@ func CheckAndReportBinariesStatus() error {
 	}
 	err := CheckBinariesRunning()
 	if err != nil {
-		PrintRed("Some programs are not running properly:")
-		PrintRedNoTimeStamp(err.Error())
+		PrintErrRed("Some programs are not running properly:")
+		PrintErrRedNoTimeStamp(err.Error())
 		return err
 	}
 	PrintGreen("All services are running normally.")
@@ -25,8 +25,8 @@ func CheckAndReportBinariesStatus() error {
 	time.Sleep(1 * time.Second)
 	err = PrintListenedPortsByBinaries()
 	if err != nil {
-		PrintRed("PrintListenedPortsByBinaries error")
-		PrintRedNoTimeStamp(err.Error())
+		PrintErrRed("PrintListenedPortsByBinaries error")
+		PrintErrRedNoTimeStamp(err.Error())
 		return err
 	}
 	return nil
@@ -39,7 +39,7 @@ func StopAndCheckBinaries() error {
 	KillExistBinaries()
 	err := attemptCheckBinaries()
 	if err != nil {
-		PrintRed(err.Error())
+		PrintErrRed(err.Error())
 		return err
 	}
 	PrintGreen("All services have been stopped")
@@ -66,7 +66,7 @@ func attemptCheckBinaries() error {
 func StartToolsAndServices(binaries []string, pathOpts *PathOptions) error {
 	if pathOpts != nil {
 		if err := UpdateGlobalPaths(pathOpts); err != nil {
-			PrintRed("Failed to update paths: " + err.Error())
+			PrintErrRed("Failed to update paths: " + err.Error())
 			return err
 		}
 	}
@@ -102,8 +102,8 @@ func StartToolsAndServices(binaries []string, pathOpts *PathOptions) error {
 		if len(toolsBinaries) > 0 {
 			PrintBlue("Starting specified tools...")
 			if err := StartTools(toolsBinaries...); err != nil {
-				PrintRed("Some specified tools failed to start:")
-				PrintRedNoTimeStamp(err.Error())
+				PrintErrRed("Some specified tools failed to start:")
+				PrintErrRedNoTimeStamp(err.Error())
 				return err
 			}
 			PrintGreen("Specified tools executed successfully")
@@ -113,13 +113,13 @@ func StartToolsAndServices(binaries []string, pathOpts *PathOptions) error {
 			KillExistBinaries()
 			err := attemptCheckBinaries()
 			if err != nil {
-				PrintRed("Some services running, details are as follows, abort start " + err.Error())
+				PrintErrRed("Some services running, details are as follows, abort start " + err.Error())
 				return err
 			}
 			err = StartBinaries(cmdBinaries...)
 			if err != nil {
-				PrintRed("Failed to start specified binaries:")
-				PrintRedNoTimeStamp(err.Error())
+				PrintErrRed("Failed to start specified binaries:")
+				PrintErrRedNoTimeStamp(err.Error())
 				return err
 			}
 			return CheckAndReportBinariesStatus()
@@ -129,8 +129,8 @@ func StartToolsAndServices(binaries []string, pathOpts *PathOptions) error {
 
 	PrintBlue("Starting tools primarily involves component verification and other preparatory tasks.")
 	if err := StartTools(); err != nil {
-		PrintRed("Some tools failed to start, details are as follows, abort start")
-		PrintRedNoTimeStamp(err.Error())
+		PrintErrRed("Some tools failed to start, details are as follows, abort start")
+		PrintErrRedNoTimeStamp(err.Error())
 		return err
 	}
 	PrintGreen("All tools executed successfully")
@@ -138,13 +138,13 @@ func StartToolsAndServices(binaries []string, pathOpts *PathOptions) error {
 	KillExistBinaries()
 	err := attemptCheckBinaries()
 	if err != nil {
-		PrintRed("Some services running, details are as follows, abort start " + err.Error())
+		PrintErrRed("Some services running, details are as follows, abort start " + err.Error())
 		return err
 	}
 	err = StartBinaries()
 	if err != nil {
-		PrintRed("Failed to start all binaries")
-		PrintRedNoTimeStamp(err.Error())
+		PrintErrRed("Failed to start all binaries")
+		PrintErrRedNoTimeStamp(err.Error())
 		return err
 	}
 	return CheckAndReportBinariesStatus()
@@ -187,7 +187,7 @@ func Build(binaries []string, pathOpts *PathOptions, buildOpt *BuildOptions) err
 
 	if pathOpts != nil {
 		if err := UpdateGlobalPaths(pathOpts); err != nil {
-			PrintRed("Failed to update paths: " + err.Error())
+			PrintErrRed("Failed to update paths: " + err.Error())
 			return err
 		}
 	}

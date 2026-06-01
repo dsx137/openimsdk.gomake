@@ -67,7 +67,7 @@ func Start() error {
 	}
 	err := setMaxOpenFiles()
 	if err != nil {
-		mageutil.PrintRed("setMaxOpenFiles failed " + err.Error())
+		mageutil.PrintErrRed("setMaxOpenFiles failed " + err.Error())
 		return err
 	}
 
@@ -88,7 +88,7 @@ func StartWithCustomConfig() error {
 	}
 	err := setMaxOpenFiles()
 	if err != nil {
-		mageutil.PrintRed("setMaxOpenFiles failed " + err.Error())
+		mageutil.PrintErrRed("setMaxOpenFiles failed " + err.Error())
 		return err
 	}
 
@@ -130,7 +130,7 @@ func Export() error {
 		return mageutil.ExportMageLauncherArchived(nil, exportOpt)
 	})
 	if err != nil {
-		mageutil.PrintRed("export failed " + err.Error())
+		mageutil.PrintErrRed("export failed " + err.Error())
 		return err
 	}
 	return nil

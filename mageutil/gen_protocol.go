@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"bufio"
 	"fmt"
-	"github.com/magefile/mage/sh"
 	"io"
 	"net/http"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/magefile/mage/sh"
 )
 
 func ensureToolsInstalled() error {
@@ -133,27 +134,27 @@ func getProtocArch(archMap map[string]string, goArch string) string {
 
 func Protocol() error {
 	if err := ensureToolsInstalled(); err != nil {
-		PrintRed("error " + err.Error())
+		PrintErrRed("error " + err.Error())
 		return err
 	}
 
 	moduleName, err := getModuleNameFromGoMod()
 	if err != nil {
-		PrintRed("error fetching module name from go.mod: " + err.Error())
+		PrintErrRed("error fetching module name from go.mod: " + err.Error())
 		return err
 	}
 
 	protoPath := "./pkg/protocol"
 	dirs, err := os.ReadDir(protoPath)
 	if err != nil {
-		PrintRed("error " + err.Error())
+		PrintErrRed("error " + err.Error())
 		return err
 	}
 
 	for _, dir := range dirs {
 		if dir.IsDir() {
 			if err := compileProtoFiles(protoPath, dir.Name(), moduleName); err != nil {
-				PrintRed("error " + err.Error())
+				PrintErrRed("error " + err.Error())
 				return err
 			}
 		}

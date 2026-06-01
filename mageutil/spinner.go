@@ -105,11 +105,3 @@ func RefreshSpinner() {
 		sp.Refresh()
 	}
 }
-
-func WithActiveSpinnerPaused(fn func()) {
-	fn()
-}
-
-func WithActiveSpinnerPausedR[R any](fn func() R) R {
-	return fn()
-}

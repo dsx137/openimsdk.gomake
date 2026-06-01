@@ -37,19 +37,9 @@ func CheckProcessNames(processPath string, expectedCount int, processMap map[str
 
 // FetchProcesses returns a map of executable paths to their running count.
 func FetchProcesses() (map[string]int, error) {
-	processMap := make(map[string]int)
-	processes, err := process.Processes()
+	processMap, err := util.ProcessCountByExePath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get processes: %v", err)
-	}
-
-	for _, p := range processes {
-		exePath, err := p.Exe()
-		if err != nil {
-			continue // Skip processes where the executable path cannot be determined
-		}
-		exePath = util.NormalizeExePath(exePath)
-		processMap[exePath]++
 	}
 
 	return processMap, nil
@@ -64,21 +54,9 @@ func CheckProcessInMap(processMap map[string]int, processPath string) bool {
 
 // FindPIDsByBinaryPath returns a map of executable paths to slices of PIDs.
 func FindPIDsByBinaryPath() (map[string][]int, error) {
-	pidMap := make(map[string][]int)
-	processes, err := process.Processes()
+	pidMap, err := util.PIDsByExePath()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get processes: %v", err)
-	}
-
-	for _, proc := range processes {
-		exePath, err := proc.Exe()
-		if err != nil {
-			// Ignore processes where the executable path cannot be determined
-			continue
-		}
-
-		exePath = util.NormalizeExePath(exePath)
-		pidMap[exePath] = append(pidMap[exePath], int(proc.Pid))
 	}
 
 	return pidMap, nil
@@ -127,20 +105,10 @@ func PrintBinaryPorts(binaryPath string, pidMap map[string][]int) {
 }
 
 func BatchKillExistBinaries(binaryPaths []string) {
-	processes, err := process.Processes()
+	exePathMap, err := util.ProcessesByExePath()
 	if err != nil {
-		PrintRed(fmt.Sprintf("Failed to get processes: %v", err))
+		PrintErrRed(fmt.Sprintf("Failed to get processes: %v", err))
 		return
-	}
-
-	exePathMap := make(map[string][]*process.Process)
-	for _, p := range processes {
-		exePath, err := p.Exe()
-		if err != nil {
-			continue // Skip processes where the executable path cannot be determined
-		}
-		exePath = util.NormalizeExePath(exePath)
-		exePathMap[exePath] = append(exePathMap[exePath], p)
 	}
 
 	for _, binaryPath := range binaryPaths {
@@ -164,7 +132,7 @@ func terminateAndKillProcess(p *process.Process) {
 	if err != nil {
 		err = p.Kill() // Fallback to kill if terminate fails
 		if err != nil {
-			PrintRed(fmt.Sprintf("Failed to kill process cmdline: %s, pid: %d, err: %v", cmdline, p.Pid, err))
+			PrintErrRed(fmt.Sprintf("Failed to kill process cmdline: %s, pid: %d, err: %v", cmdline, p.Pid, err))
 		} else {
 			PrintYellow(fmt.Sprintf("Killed process cmdline: %s, pid: %d", cmdline, p.Pid))
 		}
@@ -175,39 +143,16 @@ func terminateAndKillProcess(p *process.Process) {
 
 // KillExistBinary kills all processes matching the given binary file path.
 func KillExistBinary(binaryPath string) {
-	processes, err := process.Processes()
+	exePathMap, err := util.ProcessesByExePath()
 	if err != nil {
-		PrintRed(fmt.Sprintf("Failed to get processes: %v", err))
+		PrintErrRed(fmt.Sprintf("Failed to get processes: %v", err))
 		return
 	}
 
-	for _, p := range processes {
-		exePath, err := p.Exe()
-		if err != nil {
-			continue
-		}
-
-		exePath = util.NormalizeExePath(exePath)
+	for exePath, procs := range exePathMap {
 		if strings.Contains(exePath, binaryPath) {
-
-			//if strings.EqualFold(exePath, binaryPath) {
-			cmdline, err := p.Cmdline()
-			if err != nil {
-				PrintYellow(fmt.Sprintf("Failed to get command line for process %d: %v", p.Pid, err))
-				continue
-			}
-
-			err = p.Terminate()
-			if err != nil {
-
-				err = p.Kill()
-				if err != nil {
-					PrintRed(fmt.Sprintf("Failed to kill process cmdline: %s, pid: %d, err: %v", cmdline, p.Pid, err))
-				} else {
-					PrintYellow(fmt.Sprintf("Killed process cmdline: %s, pid: %d", cmdline, p.Pid))
-				}
-			} else {
-				PrintGreen(fmt.Sprintf("Terminated process cmdline: %s, pid: %d", cmdline, p.Pid))
+			for _, p := range procs {
+				terminateAndKillProcess(p)
 			}
 		}
 	}
@@ -220,7 +165,7 @@ func DetectPlatform() (string, error) {
 	case "amd64", "arm64":
 	default:
 		err := fmt.Errorf("unsupported architecture: %s", targetArch)
-		PrintRed(err.Error())
+		PrintErrRed(err.Error())
 		return "", err
 	}
 	return fmt.Sprintf("%s_%s", targetOS, targetArch), nil

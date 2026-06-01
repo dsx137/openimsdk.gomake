@@ -38,7 +38,7 @@ func StartBinaries(specificBinaries ...string) error {
 		binFullPath := filepath.Join(Paths.OutputHostBin, binary)
 
 		if _, err := os.Stat(binFullPath); err != nil {
-			PrintRed(fmt.Sprintf("Binary not found: %s. Please build first.", binFullPath))
+			PrintErrRed(fmt.Sprintf("Binary not found: %s. Please build first.", binFullPath))
 			continue
 		}
 
@@ -48,15 +48,11 @@ func StartBinaries(specificBinaries ...string) error {
 				configPath = Paths.K8sConfig
 			}
 			args := []string{"-i", strconv.Itoa(i), "-c", configPath}
-			logFile, err := getSharedLogFile()
-			if err != nil {
-				return err
-			}
 			cmd := NewCmd(binFullPath).
 				WithArgs(args...).
 				WithDir(Paths.OutputHostBin).
-				WithStdout(logFile).
-				WithStderr(logFile)
+				WithStdout(GetSharedLogFileWithoutError()).
+				WithStderr(GetSharedLogFileWithoutError())
 			PrintBlue(fmt.Sprintf("Starting %s", cmd.String()))
 			if err := cmd.Start(); err != nil {
 				return fmt.Errorf("failed to start %s with args %v: %v", binFullPath, args, err)
@@ -85,7 +81,7 @@ func StartTools(specificTools ...string) error {
 		toolFullPath := GetBinToolsFullPath(tool)
 
 		if _, err := os.Stat(toolFullPath); err != nil {
-			PrintRed(fmt.Sprintf("Tool not found: %s. Please build first.", toolFullPath))
+			PrintErrRed(fmt.Sprintf("Tool not found: %s. Please build first.", toolFullPath))
 			continue
 		}
 
@@ -96,7 +92,9 @@ func StartTools(specificTools ...string) error {
 
 		cmd := NewCmd(toolFullPath).
 			WithArgs("-c", configPath).
-			WithDir(Paths.OutputHostBinTools)
+			WithDir(Paths.OutputHostBinTools).
+			WithStdout(GetSharedLogFileWithoutError()).
+			WithStderr(GetSharedLogFileWithoutError())
 		PrintBlue(fmt.Sprintf("Starting %s", cmd.String()))
 
 		if err := cmd.Run(); err != nil {

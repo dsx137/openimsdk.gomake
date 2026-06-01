@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pterm/pterm"
 )
 
 const (
@@ -63,8 +65,7 @@ func Print(opt PrintOptions) (int, error) {
 		logWriteMu.Lock()
 		defer logWriteMu.Unlock()
 
-		nLocal, errLocal := io.WriteString(consoleWriter, consoleMessage)
-		n, err = nLocal, errLocal
+		n, err = writeConsoleMessage(consoleWriter, consoleMessage)
 
 		logFile, logErr := getSharedLogFile()
 		if logErr != nil {
@@ -77,6 +78,15 @@ func Print(opt PrintOptions) (int, error) {
 	})
 
 	return n, err
+}
+
+func writeConsoleMessage(writer io.Writer, message string) (int, error) {
+	if spinner := activeSpinner.Load(); spinner != nil && spinner.enabled && (writer == os.Stdout || writer == os.Stderr) {
+		pterm.Fprint(writer, message)
+		spinner.Refresh()
+		return len(message), nil
+	}
+	return io.WriteString(writer, message)
 }
 
 func formatPrintMessage(opt PrintOptions, timeFmt string, withColor bool) string {
@@ -106,19 +116,6 @@ func formatPrintMessage(opt PrintOptions, timeFmt string, withColor bool) string
 	}
 
 	return b.String()
-}
-
-func openDetachedCommandLogFile() (*os.File, error) {
-	path, err := logFilePath()
-	if err != nil {
-		return nil, err
-	}
-
-	logFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open log file %s: %w", path, err)
-	}
-	return logFile, nil
 }
 
 func getSharedLogFile() (*os.File, error) {

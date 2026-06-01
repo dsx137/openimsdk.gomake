@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync/atomic"
+	"sync"
 
 	"github.com/openimsdk/gomake/internal/priority"
 	"github.com/openimsdk/gomake/internal/util"
@@ -35,7 +35,7 @@ func (opt *BuildOptions) GetPlatforms() []string {
 	return util.NilAsZero(util.NilAsZero(opt).Platforms)
 }
 
-func CompileForPlatform(buildOpt *BuildOptions, platform string, compileBinaries []string) {
+func CompileForPlatform(buildOpt *BuildOptions, platform string, compileBinaries []string) error {
 	var cmdBinaries, toolsBinaries []string
 
 	toolsPrefix := Paths.ToolsDir
@@ -77,18 +77,26 @@ func CompileForPlatform(buildOpt *BuildOptions, platform string, compileBinaries
 
 	if len(cmdBinaries) > 0 {
 		PrintBlue(fmt.Sprintf("Compiling cmd binaries for %s...", platform))
-		cmdCompiledDirs = compileDir(buildOpt, filepath.Join(Paths.Root, Paths.SrcDir), Paths.OutputBinPath, platform, cmdBinaries)
+		compiledDirs, err := compileDir(buildOpt, filepath.Join(Paths.Root, Paths.SrcDir), Paths.OutputBinPath, platform, cmdBinaries)
+		if err != nil {
+			return err
+		}
+		cmdCompiledDirs = compiledDirs
 	}
 
 	if len(toolsBinaries) > 0 {
 		PrintBlue(fmt.Sprintf("Compiling tools binaries for %s...", platform))
-		toolsCompiledDirs = compileDir(buildOpt, filepath.Join(Paths.Root, Paths.ToolsDir), Paths.OutputBinToolPath, platform, toolsBinaries)
+		compiledDirs, err := compileDir(buildOpt, filepath.Join(Paths.Root, Paths.ToolsDir), Paths.OutputBinToolPath, platform, toolsBinaries)
+		if err != nil {
+			return err
+		}
+		toolsCompiledDirs = compiledDirs
 	}
 
-	createStartConfigYML(cmdCompiledDirs, toolsCompiledDirs)
+	return createStartConfigYML(cmdCompiledDirs, toolsCompiledDirs)
 }
 
-func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, compileBinaries []string) []string {
+func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, compileBinaries []string) ([]string, error) {
 	releaseEnabled := buildOpt.GetRelease()
 	compressEnabled := buildOpt.GetCompress()
 	cgoEnabled := buildOpt.GetCgoEnabled()
@@ -97,21 +105,26 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 
 	if info, err := os.Stat(sourceDir); err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return nil, nil
 		}
 		PrintRed(fmt.Sprintf("Failed read directory %s: %v", sourceDir, err))
-		os.Exit(1)
+		return nil, err
 	} else if !info.IsDir() {
-		PrintRed(fmt.Sprintf("Failed %s is not dir", sourceDir))
-		os.Exit(1)
+		err := fmt.Errorf("%s is not dir", sourceDir)
+		PrintRed("Failed " + err.Error())
+		return nil, err
 	}
 
-	targetOS, targetArch := strings.Split(platform, "_")[0], strings.Split(platform, "_")[1]
+	platformParts := strings.SplitN(platform, "_", 2)
+	if len(platformParts) != 2 {
+		return nil, fmt.Errorf("invalid platform format: %s", platform)
+	}
+	targetOS, targetArch := platformParts[0], platformParts[1]
 	outputDir := filepath.Join(outputBase, targetOS, targetArch)
 
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		PrintRed(fmt.Sprintf("Failed to create directory %s: %v", outputDir, err))
-		os.Exit(1)
+		return nil, err
 	}
 
 	cpuNum := runtime.GOMAXPROCS(0)
@@ -133,16 +146,15 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 	}
 	PrintGreen(fmt.Sprintf("The number of concurrent compilations is %d", cpuNum))
 
-	task := make(chan int, cpuNum)
-	go func() {
-		for i := range compileBinaries {
-			task <- i
-		}
-		close(task)
-	}()
+	task := make(chan int, len(compileBinaries))
+	for i := range compileBinaries {
+		task <- i
+	}
+	close(task)
 
-	res := make(chan string, 1)
-	running := int64(cpuNum)
+	res := make(chan string, len(compileBinaries))
+	errCh := make(chan error, cpuNum)
+	var wg sync.WaitGroup
 
 	env := map[string]string{
 		"GOOS":   targetOS,
@@ -152,28 +164,18 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 		env["CGO_ENABLED"] = cgoEnabled
 	}
 
-	baseDirAbs, err := filepath.Abs(Paths.Root)
-	if err != nil {
-		PrintRed(fmt.Sprintf("Failed to get absolute path for root: %v", err))
-		os.Exit(1)
-	}
-
 	for i := 0; i < cpuNum; i++ {
+		wg.Add(1)
 		go func() {
-			defer func() {
-				if atomic.AddInt64(&running, -1) == 0 {
-					close(res)
-				}
-			}()
+			defer wg.Done()
 
 			for index := range task {
-				originalDir := baseDirAbs
-
 				binaryPath := filepath.Join(sourceDir, compileBinaries[index])
 				path, err := util.FindMainGoFile(binaryPath)
 				if err != nil {
 					PrintYellow(fmt.Sprintf("Failed to walk through binary path %s: %v", binaryPath, err))
-					os.Exit(1)
+					errCh <- err
+					return
 				}
 				if path == "" {
 					continue
@@ -193,18 +195,13 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 					PrintBlue(fmt.Sprintf("Found go.mod at: %s", goModDir))
 				}
 
-				if err := os.Chdir(goModDir); err != nil {
-					PrintRed(fmt.Sprintf("Failed to change directory to %s: %v", goModDir, err))
-					os.Chdir(originalDir)
-					continue
-				}
-
 				outputPath := filepath.Join(outputDir, outputFileName)
 
 				relPath, err := filepath.Rel(goModDir, path)
 				if err != nil {
 					PrintRed(fmt.Sprintf("Failed to get relative path: %v", err))
-					os.Exit(1)
+					errCh <- err
+					return
 				}
 
 				buildTarget := relPath
@@ -220,22 +217,26 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 
 				err = NewCmd("go").
 					WithArgs(buildArgs...).
+					WithDir(goModDir).
 					WithEnv(env).
 					WithPriority(priority.Low).
 					Run()
 
-				os.Chdir(originalDir)
-
 				if err != nil {
-					PrintRed("Compilation aborted. " + fmt.Sprintf("failed to compile %s for %s: %v", dirName, platform, err))
-					os.Exit(1)
+					err = fmt.Errorf("failed to compile %s for %s: %w", dirName, platform, err)
+					PrintRed("Compilation aborted. " + err.Error())
+					errCh <- err
+					return
 				}
 
 				PrintGreen(fmt.Sprintf("Successfully compiled. dir: %s for platform: %s binary: %s", dirName, platform, outputFileName))
 
 				if compressEnabled {
 					PrintBlue(fmt.Sprintf("Compressing %s with UPX...", outputFileName))
-					if err := NewCmd("upx").WithArgs("--lzma", outputPath).WithPriority(priority.Low).Run(); err != nil {
+					cmd := NewCmd("upx").
+						WithArgs("--lzma", outputPath).
+						WithPriority(priority.Low)
+					if err := cmd.Run(); err != nil {
 						PrintYellow(fmt.Sprintf("UPX compression failed for %s (non-fatal): %v", outputFileName, err))
 					} else {
 						PrintGreen(fmt.Sprintf("Successfully compressed with UPX: %s", outputFileName))
@@ -246,20 +247,30 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 			}
 		}()
 	}
+	go func() {
+		wg.Wait()
+		close(res)
+		close(errCh)
+	}()
 
 	compiledDirs := make([]string, 0, len(compileBinaries))
 	for str := range res {
 		compiledDirs = append(compiledDirs, str)
 	}
-	return compiledDirs
+	for err := range errCh {
+		if err != nil {
+			return compiledDirs, err
+		}
+	}
+	return compiledDirs, nil
 }
 
-func createStartConfigYML(cmdDirs, toolsDirs []string) {
+func createStartConfigYML(cmdDirs, toolsDirs []string) error {
 	configPath := filepath.Join(Paths.Root, StartConfigFile)
 
 	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
 		PrintBlue("start-config.yml already exists, skipping creation.")
-		return
+		return nil
 	}
 
 	var content strings.Builder
@@ -276,9 +287,10 @@ func createStartConfigYML(cmdDirs, toolsDirs []string) {
 	err := os.WriteFile(configPath, []byte(content.String()), 0644)
 	if err != nil {
 		PrintRed("Failed to create start-config.yml: " + err.Error())
-		return
+		return err
 	}
 	PrintGreen("start-config.yml created successfully.")
+	return nil
 }
 
 func ResolveBuildOptions(codeOpt *BuildOptions, envOpt *BuildOptions) *BuildOptions {

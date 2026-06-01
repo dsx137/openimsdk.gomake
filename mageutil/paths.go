@@ -206,12 +206,12 @@ func (p *PathConfig) GetBinFullPath(binName string) string {
 	return filepath.Join(p.OutputHostBin, binName)
 }
 
-// GetToolFullPath returns the full path for a tool
+// GetBinToolsFullPath GetToolFullPath returns the full path for a tool
 func (p *PathConfig) GetBinToolsFullPath(toolName string) string {
 	return filepath.Join(p.OutputHostBinTools, toolName)
 }
 
-// Compatibility: maintain original global functions
+// GetBinFullPath Compatibility: maintain original global functions
 func GetBinFullPath(binName string) string {
 	return Paths.GetBinFullPath(binName)
 }

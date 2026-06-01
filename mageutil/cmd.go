@@ -18,13 +18,11 @@ type Cmd struct {
 	env map[string]string
 
 	priority *priority.Level
-
-	stdoutBuf bytes.Buffer
-	stderrBuf bytes.Buffer
 }
 
 func NewCmd(command string) *Cmd {
-	return &Cmd{execCmd: exec.Command(command)}
+	cmd := &Cmd{execCmd: exec.Command(command)}
+	return cmd
 }
 
 func (c *Cmd) WithArgs(args ...string) *Cmd {
@@ -61,20 +59,12 @@ func (c *Cmd) WithStdin(stdin io.Reader) *Cmd {
 }
 
 func (c *Cmd) WithStdout(stdout io.Writer) *Cmd {
-	if stdout == nil {
-		stdout = commandOutputWriter(os.Stdout, &c.stdoutBuf)
-	} else {
-		c.execCmd.Stdout = stdout
-	}
+	c.execCmd.Stdout = stdout
 	return c
 }
 
 func (c *Cmd) WithStderr(stderr io.Writer) *Cmd {
-	if stderr == nil {
-		stderr = commandOutputWriter(os.Stderr, &c.stderrBuf)
-	} else {
-		c.execCmd.Stderr = stderr
-	}
+	c.execCmd.Stderr = stderr
 	return c
 }
 
@@ -112,17 +102,22 @@ func (c *Cmd) String() string {
 }
 
 func (c *Cmd) Output() ([]byte, error) {
+	if c.execCmd.Stdout != nil {
+		return nil, fmt.Errorf("stdout already set")
+	}
+	buf := bytes.NewBuffer(nil)
+	c.execCmd.Stdout = buf
 	err := c.Run()
-	dst := make([]byte, len(c.stdoutBuf.Bytes()))
-	copy(dst, c.stdoutBuf.Bytes())
-	return dst, err
+	return buf.Bytes(), err
 }
 
-func commandOutputWriter(writers ...io.Writer) io.Writer {
-	logFile, err := getSharedLogFile()
-	if err != nil {
-		PrintYellow(fmt.Sprintf("Warning: failed to open log file for command output: %v", err))
-		return io.MultiWriter(writers...)
+func (c *Cmd) CombinedOutput() ([]byte, error) {
+	if c.execCmd.Stdout != nil || c.execCmd.Stderr != nil {
+		return nil, fmt.Errorf("stdout or stderr already set")
 	}
-	return io.MultiWriter(append(writers, logFile)...)
+	buf := bytes.NewBuffer(nil)
+	c.execCmd.Stdout = buf
+	c.execCmd.Stderr = buf
+	err := c.Run()
+	return buf.Bytes(), err
 }

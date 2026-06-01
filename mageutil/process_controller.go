@@ -48,20 +48,19 @@ func StartBinaries(specificBinaries ...string) error {
 				configPath = Paths.K8sConfig
 			}
 			args := []string{"-i", strconv.Itoa(i), "-c", configPath}
-			cmd := NewCmd(binFullPath).WithArgs(args...)
-			PrintBlue(fmt.Sprintf("Starting %s", cmd.String()))
-			logFile, err := openDetachedCommandLogFile()
+			logFile, err := getSharedLogFile()
 			if err != nil {
 				return err
 			}
-			cmd.WithDir(Paths.OutputHostBin)
-			cmd.WithStdout(logFile)
-			cmd.WithStderr(logFile)
+			cmd := NewCmd(binFullPath).
+				WithArgs(args...).
+				WithDir(Paths.OutputHostBin).
+				WithStdout(logFile).
+				WithStderr(logFile)
+			PrintBlue(fmt.Sprintf("Starting %s", cmd.String()))
 			if err := cmd.Start(); err != nil {
-				_ = logFile.Close()
 				return fmt.Errorf("failed to start %s with args %v: %v", binFullPath, args, err)
 			}
-			_ = logFile.Close()
 		}
 	}
 	return nil
@@ -95,23 +94,15 @@ func StartTools(specificTools ...string) error {
 			configPath = Paths.K8sConfig
 		}
 
-		logFile, err := openDetachedCommandLogFile()
-		if err != nil {
-			return err
-		}
 		cmd := NewCmd(toolFullPath).
 			WithArgs("-c", configPath).
-			WithDir(Paths.OutputHostBinTools).
-			WithStdout(logFile).
-			WithStderr(logFile)
+			WithDir(Paths.OutputHostBinTools)
 		PrintBlue(fmt.Sprintf("Starting %s", cmd.String()))
 
 		if err := cmd.Run(); err != nil {
-			_ = logFile.Close()
 			return fmt.Errorf("failed to run %s with error: %v", toolFullPath, err)
 		}
 
-		_ = logFile.Close()
 		PrintGreen(fmt.Sprintf("Starting %s successfully", cmd.String()))
 	}
 	return nil

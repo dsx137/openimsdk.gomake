@@ -10,13 +10,15 @@ import (
 	"github.com/openimsdk/gomake/internal/util"
 )
 
-func CheckAndReportBinariesStatus() {
-	InitForSSC()
+func CheckAndReportBinariesStatus() error {
+	if err := InitForSSC(); err != nil {
+		return err
+	}
 	err := CheckBinariesRunning()
 	if err != nil {
 		PrintRed("Some programs are not running properly:")
 		PrintRedNoTimeStamp(err.Error())
-		os.Exit(1)
+		return err
 	}
 	PrintGreen("All services are running normally.")
 	PrintBlue("Display details of the ports listened to by the service:")
@@ -25,19 +27,23 @@ func CheckAndReportBinariesStatus() {
 	if err != nil {
 		PrintRed("PrintListenedPortsByBinaries error")
 		PrintRedNoTimeStamp(err.Error())
-		os.Exit(1)
+		return err
 	}
+	return nil
 }
 
-func StopAndCheckBinaries() {
-	InitForSSC()
+func StopAndCheckBinaries() error {
+	if err := InitForSSC(); err != nil {
+		return err
+	}
 	KillExistBinaries()
 	err := attemptCheckBinaries()
 	if err != nil {
 		PrintRed(err.Error())
-		return
+		return err
 	}
 	PrintGreen("All services have been stopped")
+	return nil
 }
 
 func attemptCheckBinaries() error {
@@ -57,11 +63,11 @@ func attemptCheckBinaries() error {
 	return fmt.Errorf("already waited for %d seconds, some services have still not stopped", maxAttempts)
 }
 
-func StartToolsAndServices(binaries []string, pathOpts *PathOptions) {
+func StartToolsAndServices(binaries []string, pathOpts *PathOptions) error {
 	if pathOpts != nil {
 		if err := UpdateGlobalPaths(pathOpts); err != nil {
 			PrintRed("Failed to update paths: " + err.Error())
-			os.Exit(1)
+			return err
 		}
 	}
 
@@ -87,7 +93,7 @@ func StartToolsAndServices(binaries []string, pathOpts *PathOptions) {
 
 		if len(cmdBinaries) == 0 && len(toolsBinaries) == 0 {
 			PrintYellow("No valid executable binaries found to start. Please build first.")
-			return
+			return nil
 		}
 
 		PrintBlue(fmt.Sprintf("Cmd binaries to start: %v", cmdBinaries))
@@ -98,7 +104,7 @@ func StartToolsAndServices(binaries []string, pathOpts *PathOptions) {
 			if err := StartTools(toolsBinaries...); err != nil {
 				PrintRed("Some specified tools failed to start:")
 				PrintRedNoTimeStamp(err.Error())
-				return
+				return err
 			}
 			PrintGreen("Specified tools executed successfully")
 		}
@@ -108,24 +114,24 @@ func StartToolsAndServices(binaries []string, pathOpts *PathOptions) {
 			err := attemptCheckBinaries()
 			if err != nil {
 				PrintRed("Some services running, details are as follows, abort start " + err.Error())
-				return
+				return err
 			}
 			err = StartBinaries(cmdBinaries...)
 			if err != nil {
 				PrintRed("Failed to start specified binaries:")
 				PrintRedNoTimeStamp(err.Error())
-				return
+				return err
 			}
-			CheckAndReportBinariesStatus()
+			return CheckAndReportBinariesStatus()
 		}
-		return
+		return nil
 	}
 
 	PrintBlue("Starting tools primarily involves component verification and other preparatory tasks.")
 	if err := StartTools(); err != nil {
 		PrintRed("Some tools failed to start, details are as follows, abort start")
 		PrintRedNoTimeStamp(err.Error())
-		return
+		return err
 	}
 	PrintGreen("All tools executed successfully")
 
@@ -133,15 +139,15 @@ func StartToolsAndServices(binaries []string, pathOpts *PathOptions) {
 	err := attemptCheckBinaries()
 	if err != nil {
 		PrintRed("Some services running, details are as follows, abort start " + err.Error())
-		return
+		return err
 	}
 	err = StartBinaries()
 	if err != nil {
 		PrintRed("Failed to start all binaries")
 		PrintRedNoTimeStamp(err.Error())
-		return
+		return err
 	}
-	CheckAndReportBinariesStatus()
+	return CheckAndReportBinariesStatus()
 }
 
 func isExecutableFile(filePath string) bool {
@@ -165,7 +171,7 @@ func isExecutableFile(filePath string) bool {
 	return info.Mode()&0111 != 0
 }
 
-func Build(binaries []string, pathOpts *PathOptions, buildOpt *BuildOptions) {
+func Build(binaries []string, pathOpts *PathOptions, buildOpt *BuildOptions) error {
 	resolvedBuildOpt := ResolveBuildOptions(buildOpt, &BuildOptions{
 		CgoEnabled: util.GetEnvWithNoErr[string]("CGO_ENABLED"),
 		Release:    util.GetEnvWithNoErr[bool]("RELEASE"),
@@ -174,13 +180,15 @@ func Build(binaries []string, pathOpts *PathOptions, buildOpt *BuildOptions) {
 	})
 
 	if _, err := os.Stat(StartConfigFile); err == nil {
-		InitForSSC()
+		if err := InitForSSC(); err != nil {
+			return err
+		}
 	}
 
 	if pathOpts != nil {
 		if err := UpdateGlobalPaths(pathOpts); err != nil {
 			PrintRed("Failed to update paths: " + err.Error())
-			os.Exit(1)
+			return err
 		}
 	}
 
@@ -190,10 +198,17 @@ func Build(binaries []string, pathOpts *PathOptions, buildOpt *BuildOptions) {
 	}
 	platforms := resolvedBuildOpt.GetPlatforms()
 	if len(platforms) == 0 {
-		platforms = []string{DetectPlatform()}
+		platform, err := DetectPlatform()
+		if err != nil {
+			return err
+		}
+		platforms = []string{platform}
 	}
 	for _, platform := range platforms {
-		CompileForPlatform(resolvedBuildOpt, platform, compileBinaries)
+		if err := CompileForPlatform(resolvedBuildOpt, platform, compileBinaries); err != nil {
+			return err
+		}
 	}
 	PrintGreen("All specified binaries under cmd and tools were successfully compiled.")
+	return nil
 }

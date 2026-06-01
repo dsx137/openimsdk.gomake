@@ -2,11 +2,11 @@ package mageutil
 
 import (
 	"fmt"
-	"os"
 	"runtime"
 	"strings"
 
 	"github.com/openimsdk/gomake/internal/util"
+	"github.com/openimsdk/tools/utils/datautil"
 	"github.com/shirou/gopsutil/v4/net"
 	"github.com/shirou/gopsutil/v4/process"
 )
@@ -120,10 +120,7 @@ func PrintBinaryPorts(binaryPath string, pidMap map[string][]int) {
 		if len(portsMap) == 0 {
 			PrintGreen(fmt.Sprintf("Cmdline: %s, PID: %d is not listening on any ports.", cmdline, pid))
 		} else {
-			ports := make([]string, 0, len(portsMap))
-			for port := range portsMap {
-				ports = append(ports, port)
-			}
+			ports := datautil.Keys(portsMap)
 			PrintGreen(fmt.Sprintf("Cmdline: %s, PID: %d is listening on ports: %s", cmdline, pid, strings.Join(ports, ", ")))
 		}
 	}
@@ -217,28 +214,17 @@ func KillExistBinary(binaryPath string) {
 }
 
 // DetectPlatform detects the operating system and architecture.
-func DetectPlatform() string {
+func DetectPlatform() (string, error) {
 	targetOS, targetArch := runtime.GOOS, runtime.GOARCH
 	switch targetArch {
 	case "amd64", "arm64":
 	default:
-		PrintRed(fmt.Sprintf("Unsupported architecture: %s", targetArch))
-		os.Exit(1)
+		err := fmt.Errorf("unsupported architecture: %s", targetArch)
+		PrintRed(err.Error())
+		return "", err
 	}
-	return fmt.Sprintf("%s_%s", targetOS, targetArch)
+	return fmt.Sprintf("%s_%s", targetOS, targetArch), nil
 }
-
-// rootDir gets the absolute path of the current directory.
-func rootDir() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		PrintRed(fmt.Sprintf("Failed to get current directory: %v", err))
-		os.Exit(1)
-	}
-	return dir
-}
-
-var rootDirPath = rootDir()
 
 // var platformsOutputBase = filepath.Join(rootDirPath, "_output/bin/platforms")
 // var toolsOutputBase = filepath.Join(rootDirPath, "_output/bin/tools")

@@ -1,6 +1,7 @@
 package mageutil
 
 import (
+	"fmt"
 	"os"
 	"runtime"
 
@@ -23,18 +24,18 @@ type Config struct {
 	MaxFileDescriptors int            `yaml:"maxFileDescriptors"`
 }
 
-func InitForSSC() {
+func InitForSSC() error {
 	yamlFile, err := os.ReadFile(StartConfigFile)
 	if err != nil {
 		PrintRed("error reading YAML file: " + err.Error())
-		os.Exit(1)
+		return fmt.Errorf("error reading YAML file: %w", err)
 	}
 
 	var config Config
 	err = yaml.Unmarshal(yamlFile, &config)
 	if err != nil {
 		PrintRed("error unmarshalling YAML: " + err.Error())
-		os.Exit(1)
+		return fmt.Errorf("error unmarshalling YAML: %w", err)
 	}
 
 	adjustedBinaries := make(map[string]int)
@@ -55,4 +56,5 @@ func InitForSSC() {
 	serviceBinaries = adjustedBinaries
 	toolBinaries = adjustedToolsBinaries
 	MaxFileDescriptors = config.MaxFileDescriptors
+	return nil
 }

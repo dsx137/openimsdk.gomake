@@ -1,11 +1,9 @@
 //go:build mage
-// +build mage
 
 package main
 
 import (
 	"flag"
-	"os"
 
 	"github.com/openimsdk/gomake/mageutil"
 )
@@ -32,19 +30,19 @@ var (
 // Build support specifical binary build.
 //
 // Example: `mage build openim-api openim-rpc-user seq`
-func Build() {
+func Build() error {
 	flag.Parse()
 	bin := flag.Args()
 	if len(bin) != 0 {
 		bin = bin[1:]
 	}
 
-	mageutil.WithSpinner("Building binaries...", func() {
-		mageutil.Build(bin, nil, nil)
+	return mageutil.WithSpinnerR("Building binaries...", func() error {
+		return mageutil.Build(bin, nil, nil)
 	})
 }
 
-func BuildWithCustomConfig() {
+func BuildWithCustomConfig() error {
 	flag.Parse()
 	bin := flag.Args()
 	if len(bin) != 0 {
@@ -58,17 +56,19 @@ func BuildWithCustomConfig() {
 		ToolsDir:  &customToolsDir,  // default is "tools"
 	}
 
-	mageutil.WithSpinner("Building binaries with custom config...", func() {
-		mageutil.Build(bin, config, nil)
+	return mageutil.WithSpinnerR("Building binaries with custom config...", func() error {
+		return mageutil.Build(bin, config, nil)
 	})
 }
 
-func Start() {
-	mageutil.InitForSSC()
+func Start() error {
+	if err := mageutil.InitForSSC(); err != nil {
+		return err
+	}
 	err := setMaxOpenFiles()
 	if err != nil {
 		mageutil.PrintRed("setMaxOpenFiles failed " + err.Error())
-		os.Exit(1)
+		return err
 	}
 
 	flag.Parse()
@@ -77,17 +77,19 @@ func Start() {
 		bin = bin[1:]
 	}
 
-	mageutil.WithSpinner("Starting tools and services...", func() {
-		mageutil.StartToolsAndServices(bin, nil)
+	return mageutil.WithSpinnerR("Starting tools and services...", func() error {
+		return mageutil.StartToolsAndServices(bin, nil)
 	})
 }
 
-func StartWithCustomConfig() {
-	mageutil.InitForSSC()
+func StartWithCustomConfig() error {
+	if err := mageutil.InitForSSC(); err != nil {
+		return err
+	}
 	err := setMaxOpenFiles()
 	if err != nil {
 		mageutil.PrintRed("setMaxOpenFiles failed " + err.Error())
-		os.Exit(1)
+		return err
 	}
 
 	flag.Parse()
@@ -102,33 +104,34 @@ func StartWithCustomConfig() {
 		ConfigDir: &customConfigDir, // default is "config"
 	}
 
-	mageutil.WithSpinner("Starting tools and services with custom config...", func() {
-		mageutil.StartToolsAndServices(bin, config)
+	return mageutil.WithSpinnerR("Starting tools and services with custom config...", func() error {
+		return mageutil.StartToolsAndServices(bin, config)
 	})
 }
 
-func Stop() {
-	mageutil.WithSpinner("Checking service status...", mageutil.StopAndCheckBinaries)
+func Stop() error {
+	return mageutil.WithSpinnerR("Checking service status...", mageutil.StopAndCheckBinaries)
 }
 
-func Check() {
-	mageutil.WithSpinner("Checking service status...", mageutil.CheckAndReportBinariesStatus)
+func Check() error {
+	return mageutil.WithSpinnerR("Checking service status...", mageutil.CheckAndReportBinariesStatus)
 }
 
-func Protocol() {
-	mageutil.WithSpinnerE("Generating protocol artifacts...", mageutil.Protocol)
+func Protocol() error {
+	return mageutil.WithSpinnerR("Generating protocol artifacts...", mageutil.Protocol)
 }
 
-func Export() {
+func Export() error {
 	exportOpt := &mageutil.ExportOptions{
 		ProjectName: &customExportProjectName,
 		BuildOpt:    customExportBuildOpt,
 	}
-	err := mageutil.WithSpinnerE("Exporting launcher archive...", func() error {
+	err := mageutil.WithSpinnerR("Exporting launcher archive...", func() error {
 		return mageutil.ExportMageLauncherArchived(nil, exportOpt)
 	})
 	if err != nil {
 		mageutil.PrintRed("export failed " + err.Error())
-		os.Exit(1)
+		return err
 	}
+	return nil
 }

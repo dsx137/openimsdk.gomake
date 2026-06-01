@@ -34,7 +34,9 @@ func (opt *ExportOptions) GetBuildOpt() *BuildOptions {
 func ExportMageLauncherArchived(overrideMappingPaths map[string]string, exportOpt *ExportOptions) error {
 	PrintBlue("Preparing launcher archive export...")
 	PrintBlue("Building binaries before export...")
-	Build(nil, nil, exportOpt.GetBuildOpt())
+	if err := Build(nil, nil, exportOpt.GetBuildOpt()); err != nil {
+		return err
+	}
 
 	tmpDir := Paths.OutputTmp
 	exportDir := Paths.OutputExport
@@ -49,7 +51,11 @@ func ExportMageLauncherArchived(overrideMappingPaths map[string]string, exportOp
 
 	platforms := os.Getenv("PLATFORMS")
 	if platforms == "" {
-		platforms = DetectPlatform()
+		platform, err := DetectPlatform()
+		if err != nil {
+			return err
+		}
+		platforms = platform
 	}
 
 	platformList := strings.Fields(platforms)

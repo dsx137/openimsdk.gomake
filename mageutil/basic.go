@@ -10,6 +10,8 @@ import (
 	"github.com/openimsdk/gomake/internal/util"
 )
 
+const checkDelay = 3 * time.Second
+
 func CheckAndReportBinariesStatus() error {
 	if err := InitForSSC(); err != nil {
 		return err
@@ -21,8 +23,9 @@ func CheckAndReportBinariesStatus() error {
 		return err
 	}
 	PrintGreen("All services are running normally.")
+	PrintGreen(fmt.Sprintf("Waiting for %v to check listened ports...", checkDelay))
+	time.Sleep(checkDelay)
 	PrintBlue("Display details of the ports listened to by the service:")
-	time.Sleep(1 * time.Second)
 	err = PrintListenedPortsByBinaries()
 	if err != nil {
 		PrintErrRed("PrintListenedPortsByBinaries error")
@@ -55,9 +58,9 @@ func attemptCheckBinaries() error {
 			return nil
 		}
 		PrintYellow("Some services have not been stopped, details are as follows: " + err.Error())
-		PrintYellow("Continue to wait for 1 second before checking again")
+		PrintYellow(fmt.Sprintf("Continue to wait for %v before checking again", checkDelay))
 		if i < maxAttempts-1 {
-			time.Sleep(1 * time.Second)
+			time.Sleep(checkDelay)
 		}
 	}
 	return fmt.Errorf("already waited for %d seconds, some services have still not stopped", maxAttempts)

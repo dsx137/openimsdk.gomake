@@ -61,6 +61,7 @@ func FindPIDsByBinaryPath() (map[string][]int, error) {
 
 	return pidMap, nil
 }
+
 func PrintBinaryPorts(binaryPath string, pidMap map[string][]int) {
 	pids, exists := pidMap[binaryPath]
 	if !exists || len(pids) == 0 {

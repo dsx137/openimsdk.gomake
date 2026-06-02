@@ -1,7 +1,6 @@
 package mageutil
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -46,6 +45,24 @@ func writeConsoleMessage(writer io.Writer, message string) (int, error) {
 	return io.WriteString(writer, message)
 }
 
+func logFilePath() (string, error) {
+	if Paths == nil {
+		return "", fmt.Errorf("paths are not initialized")
+	}
+
+	logDir := strings.TrimSpace(Paths.OutputLogs)
+	if logDir == "" {
+		return "", fmt.Errorf("log directory is empty")
+	}
+
+	logDir = filepath.Clean(logDir)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create log directory %s: %w", logDir, err)
+	}
+
+	return filepath.Join(logDir, defaultLogFileName), nil
+}
+
 func GetSharedLogFile() (*os.File, error) {
 	path, err := logFilePath()
 	if err != nil {
@@ -84,24 +101,6 @@ func GetSharedLogFileWithoutError() *os.File {
 	return logFile
 }
 
-func logFilePath() (string, error) {
-	if Paths == nil {
-		return "", fmt.Errorf("paths are not initialized")
-	}
-
-	logDir := strings.TrimSpace(Paths.OutputLogs)
-	if logDir == "" {
-		return "", fmt.Errorf("log directory is empty")
-	}
-
-	logDir = filepath.Clean(logDir)
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create log directory %s: %w", logDir, err)
-	}
-
-	return filepath.Join(logDir, defaultLogFileName), nil
-}
-
 func GetStdoutInnerLogWriter() io.Writer {
 	return util.MultiWriter(
 		util.WriterFunc(func(p []byte) (n int, err error) { return writeConsoleMessage(defaultStdout, string(p)) }),
@@ -136,17 +135,15 @@ func Print(opt PrintOptions) error {
 		err error
 	)
 
-	if opt.Writer == nil {
-		return errors.New("no output writer")
-	}
-
 	consoleMessage := formatPrintMessage(opt, tf, true)
 	fileMessage := formatPrintMessage(opt, tf, false)
 
 	logWriteMu.Lock()
 	defer logWriteMu.Unlock()
 
-	_, err = writeConsoleMessage(opt.Writer, consoleMessage)
+	if opt.Writer != nil {
+		_, err = writeConsoleMessage(opt.Writer, consoleMessage)
+	}
 
 	logFile, logErr := GetSharedLogFile()
 	if logErr != nil {
@@ -198,9 +195,20 @@ func PrintGreen(message string) {
 func PrintYellow(message string) {
 	_ = Print(PrintOptions{Color: ColorYellow, Message: message, WithTime: true, Writer: defaultStdout})
 }
-func PrintErrRed(message string) {
-	_ = Print(PrintOptions{Color: ColorRed, Message: message, WithTime: true, Writer: defaultStderr})
+
+func PrintErr(err error) {
+	if err == nil {
+		return
+	}
+	_ = Print(PrintOptions{Color: ColorRed, Message: err.Error(), WithTime: true, Writer: defaultStderr})
 }
-func PrintErrRedNoTimeStamp(message string) {
-	_ = Print(PrintOptions{Color: ColorRed, Message: message, WithTime: false, Writer: defaultStderr})
+func PrintErrNoTimeStamp(err error) {
+	if err == nil {
+		return
+	}
+	_ = Print(PrintOptions{Color: ColorRed, Message: err.Error(), WithTime: false, Writer: defaultStderr})
+}
+
+func PrintErrPtr(err *error) {
+	PrintErr(*err)
 }

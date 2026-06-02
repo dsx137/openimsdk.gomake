@@ -3,12 +3,12 @@
 package main
 
 import (
-	"flag"
+	"fmt"
 
 	"github.com/openimsdk/gomake/mageutil"
 )
 
-var Default = Build
+var Default = BuildAll
 
 var Aliases = map[string]any{
 	"buildcc": BuildWithCustomConfig,
@@ -27,27 +27,21 @@ var (
 	customExportBuildOpt    *mageutil.BuildOptions
 )
 
+func BuildAll() error { return Build(nil) }
+
 // Build support specifical binary build.
 //
-// Example: `mage build openim-api openim-rpc-user seq`
-func Build() error {
-	flag.Parse()
-	bin := flag.Args()
-	if len(bin) != 0 {
-		bin = bin[1:]
-	}
+// Example: `mage build -bins=openim-api,openim-rpc-user,seq`
+func Build(bins *string) (err error) {
+	defer mageutil.PrintErrPtr(&err)
 
 	return mageutil.WithSpinnerR("Building binaries...", func() error {
-		return mageutil.Build(bin, nil, nil)
+		return mageutil.Build(mageutil.ParseArgList(bins), nil, nil)
 	})
 }
 
-func BuildWithCustomConfig() error {
-	flag.Parse()
-	bin := flag.Args()
-	if len(bin) != 0 {
-		bin = bin[1:]
-	}
+func BuildWithCustomConfig(bins *string) (err error) {
+	defer mageutil.PrintErrPtr(&err)
 
 	config := &mageutil.PathOptions{
 		RootDir:   &customRootDir,   // default is "."(current directory)
@@ -57,45 +51,35 @@ func BuildWithCustomConfig() error {
 	}
 
 	return mageutil.WithSpinnerR("Building binaries with custom config...", func() error {
-		return mageutil.Build(bin, config, nil)
+		return mageutil.Build(mageutil.ParseArgList(bins), config, nil)
 	})
 }
 
-func Start() error {
+func Start(bins *string) (err error) {
+	defer mageutil.PrintErrPtr(&err)
+
 	if err := mageutil.InitForSSC(); err != nil {
 		return err
 	}
-	err := setMaxOpenFiles()
+	err = setMaxOpenFiles()
 	if err != nil {
-		mageutil.PrintErrRed("setMaxOpenFiles failed " + err.Error())
-		return err
-	}
-
-	flag.Parse()
-	bin := flag.Args()
-	if len(bin) != 0 {
-		bin = bin[1:]
+		return fmt.Errorf("setMaxOpenFiles failed %w", err)
 	}
 
 	return mageutil.WithSpinnerR("Starting tools and services...", func() error {
-		return mageutil.StartToolsAndServices(bin, nil)
+		return mageutil.StartToolsAndServices(mageutil.ParseArgList(bins), nil)
 	})
 }
 
-func StartWithCustomConfig() error {
+func StartWithCustomConfig(bins *string) (err error) {
+	defer mageutil.PrintErrPtr(&err)
+
 	if err := mageutil.InitForSSC(); err != nil {
 		return err
 	}
-	err := setMaxOpenFiles()
+	err = setMaxOpenFiles()
 	if err != nil {
-		mageutil.PrintErrRed("setMaxOpenFiles failed " + err.Error())
-		return err
-	}
-
-	flag.Parse()
-	bin := flag.Args()
-	if len(bin) != 0 {
-		bin = bin[1:]
+		return fmt.Errorf("setMaxOpenFiles failed %w", err)
 	}
 
 	config := &mageutil.PathOptions{
@@ -105,33 +89,37 @@ func StartWithCustomConfig() error {
 	}
 
 	return mageutil.WithSpinnerR("Starting tools and services with custom config...", func() error {
-		return mageutil.StartToolsAndServices(bin, config)
+		return mageutil.StartToolsAndServices(mageutil.ParseArgList(bins), config)
 	})
 }
 
-func Stop() error {
+func Stop() (err error) {
+	defer mageutil.PrintErrPtr(&err)
 	return mageutil.WithSpinnerR("Checking service status...", mageutil.StopAndCheckBinaries)
 }
 
-func Check() error {
+func Check() (err error) {
+	defer mageutil.PrintErrPtr(&err)
 	return mageutil.WithSpinnerR("Checking service status...", mageutil.CheckAndReportBinariesStatus)
 }
 
-func Protocol() error {
+func Protocol() (err error) {
+	defer mageutil.PrintErrPtr(&err)
 	return mageutil.WithSpinnerR("Generating protocol artifacts...", mageutil.Protocol)
 }
 
-func Export() error {
+func Export() (err error) {
+	defer mageutil.PrintErrPtr(&err)
+
 	exportOpt := &mageutil.ExportOptions{
 		ProjectName: &customExportProjectName,
 		BuildOpt:    customExportBuildOpt,
 	}
-	err := mageutil.WithSpinnerR("Exporting launcher archive...", func() error {
+	err = mageutil.WithSpinnerR("Exporting launcher archive...", func() error {
 		return mageutil.ExportMageLauncherArchived(nil, exportOpt)
 	})
 	if err != nil {
-		mageutil.PrintErrRed("export failed " + err.Error())
-		return err
+		return fmt.Errorf("export failed %w", err)
 	}
 	return nil
 }

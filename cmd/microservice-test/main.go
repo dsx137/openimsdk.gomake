@@ -26,7 +26,7 @@ func main() {
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		mageutil.PrintErrRed(fmt.Sprintf("Failed to listen on port %d: %v", port, err))
+		mageutil.PrintErr(fmt.Errorf("failed to listen on port %d: %w", port, err))
 		os.Exit(1)
 	}
 	defer listener.Close()
@@ -39,7 +39,7 @@ func main() {
 
 	// Start serving, using the listener we created
 	if err := http.Serve(listener, nil); err != nil {
-		mageutil.PrintErrRed(fmt.Sprintf("HTTP server exited: %v", err))
+		mageutil.PrintErr(fmt.Errorf("HTTP server exited: %w", err))
 		os.Exit(1)
 	}
 }

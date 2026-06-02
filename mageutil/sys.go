@@ -105,11 +105,10 @@ func PrintBinaryPorts(binaryPath string, pidMap map[string][]int) {
 	}
 }
 
-func BatchKillExistBinaries(binaryPaths []string) {
+func BatchKillExistBinaries(binaryPaths []string) error {
 	exePathMap, err := util.ProcessesByExePath()
 	if err != nil {
-		PrintErrRed(fmt.Sprintf("Failed to get processes: %v", err))
-		return
+		return fmt.Errorf("failed to get processes: %w", err)
 	}
 
 	for _, binaryPath := range binaryPaths {
@@ -120,6 +119,8 @@ func BatchKillExistBinaries(binaryPaths []string) {
 			}
 		}
 	}
+
+	return nil
 }
 
 func terminateAndKillProcess(p *process.Process) {
@@ -133,7 +134,7 @@ func terminateAndKillProcess(p *process.Process) {
 	if err != nil {
 		err = p.Kill() // Fallback to kill if terminate fails
 		if err != nil {
-			PrintErrRed(fmt.Sprintf("Failed to kill process cmdline: %s, pid: %d, err: %v", cmdline, p.Pid, err))
+			PrintErr(fmt.Errorf("failed to kill process cmdline: %s, pid: %d, err: %w", cmdline, p.Pid, err))
 		} else {
 			PrintYellow(fmt.Sprintf("Killed process cmdline: %s, pid: %d", cmdline, p.Pid))
 		}
@@ -143,11 +144,10 @@ func terminateAndKillProcess(p *process.Process) {
 }
 
 // KillExistBinary kills all processes matching the given binary file path.
-func KillExistBinary(binaryPath string) {
+func KillExistBinary(binaryPath string) error {
 	exePathMap, err := util.ProcessesByExePath()
 	if err != nil {
-		PrintErrRed(fmt.Sprintf("Failed to get processes: %v", err))
-		return
+		return fmt.Errorf("failed to get processes: %w", err)
 	}
 
 	for exePath, procs := range exePathMap {
@@ -157,6 +157,8 @@ func KillExistBinary(binaryPath string) {
 			}
 		}
 	}
+
+	return nil
 }
 
 // DetectPlatform detects the operating system and architecture.
@@ -166,7 +168,6 @@ func DetectPlatform() (string, error) {
 	case "amd64", "arm64":
 	default:
 		err := fmt.Errorf("unsupported architecture: %s", targetArch)
-		PrintErrRed(err.Error())
 		return "", err
 	}
 	return fmt.Sprintf("%s_%s", targetOS, targetArch), nil

@@ -107,11 +107,11 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		PrintErrRed(fmt.Sprintf("Failed read directory %s: %v", sourceDir, err))
+		PrintErr(fmt.Errorf("failed read directory %s: %w", sourceDir, err))
 		return nil, err
 	} else if !info.IsDir() {
 		err := fmt.Errorf("%s is not dir", sourceDir)
-		PrintErrRed("Failed " + err.Error())
+		PrintErr(fmt.Errorf("failed %w", err))
 		return nil, err
 	}
 
@@ -123,7 +123,7 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 	outputDir := filepath.Join(outputBase, targetOS, targetArch)
 
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		PrintErrRed(fmt.Sprintf("Failed to create directory %s: %v", outputDir, err))
+		PrintErr(fmt.Errorf("failed to create directory %s: %w", outputDir, err))
 		return nil, err
 	}
 
@@ -199,7 +199,7 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 
 				relPath, err := filepath.Rel(goModDir, path)
 				if err != nil {
-					PrintErrRed(fmt.Sprintf("Failed to get relative path: %v", err))
+					PrintErr(fmt.Errorf("failed to get relative path: %w", err))
 					errCh <- err
 					return
 				}
@@ -226,7 +226,7 @@ func compileDir(buildOpt *BuildOptions, sourceDir, outputBase, platform string, 
 
 				if err != nil {
 					err = fmt.Errorf("failed to compile %s for %s: %w", dirName, platform, err)
-					PrintErrRed("Compilation aborted. " + err.Error())
+					PrintErr(fmt.Errorf("compilation aborted: %w", err))
 					errCh <- err
 					return
 				}
@@ -290,7 +290,7 @@ func createStartConfigYML(cmdDirs, toolsDirs []string) error {
 
 	err := os.WriteFile(configPath, []byte(content.String()), 0644)
 	if err != nil {
-		PrintErrRed("Failed to create start-config.yml: " + err.Error())
+		PrintErr(fmt.Errorf("failed to create start-config.yml: %w", err))
 		return err
 	}
 	PrintGreen("start-config.yml created successfully.")

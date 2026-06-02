@@ -1,6 +1,7 @@
 package mageutil
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,11 +11,14 @@ import (
 )
 
 // StopBinaries iterates over all binary files and terminates their corresponding processes.
-func StopBinaries() {
+func StopBinaries() error {
+	var errs []error
 	for binary := range serviceBinaries {
 		fullPath := GetBinFullPath(binary)
-		KillExistBinary(fullPath)
+		errs = append(errs, KillExistBinary(fullPath))
 	}
+
+	return errors.Join(errs...)
 }
 
 // StartBinaries Start all binary services or specified ones.
@@ -38,7 +42,7 @@ func StartBinaries(specificBinaries ...string) error {
 		binFullPath := filepath.Join(Paths.OutputHostBin, binary)
 
 		if _, err := os.Stat(binFullPath); err != nil {
-			PrintErrRed(fmt.Sprintf("Binary not found: %s. Please build first.", binFullPath))
+			PrintErr(fmt.Errorf("binary not found: %s. Please build first", binFullPath))
 			continue
 		}
 
@@ -81,7 +85,7 @@ func StartTools(specificTools ...string) error {
 		toolFullPath := GetBinToolsFullPath(tool)
 
 		if _, err := os.Stat(toolFullPath); err != nil {
-			PrintErrRed(fmt.Sprintf("Tool not found: %s. Please build first.", toolFullPath))
+			PrintErr(fmt.Errorf("tool not found: %s. please build first", toolFullPath))
 			continue
 		}
 
@@ -107,13 +111,13 @@ func StartTools(specificTools ...string) error {
 }
 
 // KillExistBinaries iterates over all binary files and kills their corresponding processes.
-func KillExistBinaries() {
+func KillExistBinaries() error {
 	var paths []string
 	for binary := range serviceBinaries {
 		fullPath := GetBinFullPath(binary)
 		paths = append(paths, fullPath)
 	}
-	BatchKillExistBinaries(paths)
+	return BatchKillExistBinaries(paths)
 }
 
 // CheckBinariesStop checks if all binary files have stopped and returns an error if there are any binaries still running.

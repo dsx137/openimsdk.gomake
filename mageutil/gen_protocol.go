@@ -134,27 +134,23 @@ func getProtocArch(archMap map[string]string, goArch string) string {
 
 func Protocol() error {
 	if err := ensureToolsInstalled(); err != nil {
-		PrintErrRed("error " + err.Error())
 		return err
 	}
 
 	moduleName, err := getModuleNameFromGoMod()
 	if err != nil {
-		PrintErrRed("error fetching module name from go.mod: " + err.Error())
-		return err
+		return fmt.Errorf("error fetching module name from go.mod: %w", err)
 	}
 
 	protoPath := "./pkg/protocol"
 	dirs, err := os.ReadDir(protoPath)
 	if err != nil {
-		PrintErrRed("error " + err.Error())
 		return err
 	}
 
 	for _, dir := range dirs {
 		if dir.IsDir() {
 			if err := compileProtoFiles(protoPath, dir.Name(), moduleName); err != nil {
-				PrintErrRed("error " + err.Error())
 				return err
 			}
 		}

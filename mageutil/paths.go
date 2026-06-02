@@ -1,9 +1,15 @@
 package mageutil
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+
+	"github.com/openimsdk/gomake/internal/util"
+	"github.com/openimsdk/tools/utils/datautil"
 )
 
 // Path constants
@@ -19,6 +25,7 @@ const (
 	ToolsDir     = "tools"
 	TmpDir       = "tmp"
 	ExportDir    = "export"
+	ArchiveDir   = "archive"
 	LogsDir      = "logs"
 	BinDir       = "bin"
 	PlatformsDir = "platforms"
@@ -33,6 +40,7 @@ type PathConfig struct {
 	OutputTools        string
 	OutputTmp          string
 	OutputExport       string
+	OutputArchive      string
 	OutputLogs         string
 	OutputBin          string
 	OutputBinPath      string
@@ -114,6 +122,7 @@ func NewPathConfig(opts *PathOptions) (*PathConfig, error) {
 	config.OutputTools = config.joinPath(config.Output, ToolsDir)
 	config.OutputTmp = config.joinPath(config.Output, TmpDir)
 	config.OutputExport = config.joinPath(config.Output, ExportDir)
+	config.OutputArchive = config.joinPath(config.Output, ArchiveDir)
 	config.OutputLogs = config.joinPath(config.Output, LogsDir)
 	config.OutputBin = config.joinPath(config.Output, BinDir)
 
@@ -180,6 +189,7 @@ func (p *PathConfig) createDirectories() error {
 		p.OutputTools,
 		p.OutputTmp,
 		p.OutputExport,
+		p.OutputArchive,
 		p.OutputLogs,
 		p.OutputBin,
 		p.OutputBinPath,
@@ -218,4 +228,95 @@ func GetBinFullPath(binName string) string {
 
 func GetBinToolsFullPath(toolName string) string {
 	return Paths.GetBinToolsFullPath(toolName)
+}
+
+func EnsureRootRelPaths(paths ...string) (map[string]string, error) {
+	root := filepath.Clean(Paths.Root)
+	if root == "" {
+		return nil, fmt.Errorf("root path is empty")
+	}
+
+	relPathMap := make(map[string]string)
+	for _, path := range paths {
+		absPath := filepath.Clean(filepath.FromSlash(path))
+		if !filepath.IsAbs(absPath) {
+			absPath = filepath.Join(root, absPath)
+		}
+
+		relPath, err := filepath.Rel(root, absPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get relative path for %s: %v", path, err)
+		}
+		relPathMap[absPath] = filepath.ToSlash(relPath)
+	}
+
+	return relPathMap, nil
+}
+
+func GetAllRootFilesExcludeIgnore() ([]string, error) {
+	root := Paths.Root
+	if root == "" {
+		return nil, fmt.Errorf("root path is empty")
+	}
+
+	cmdOutput, err := NewCmd("git").
+		WithArgs("ls-files", "-c", "--exclude-standard", "-z").
+		WithDir(root).
+		Output()
+
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return nil, fmt.Errorf("failed to list root files via git ls-files: %s", strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return nil, fmt.Errorf("failed to list root files via git ls-files: %v", err)
+	}
+
+	relPaths := make([]string, 0)
+	for _, relPath := range strings.Split(string(cmdOutput), "\x00") {
+		if relPath == "" {
+			continue
+		}
+
+		cleanRelPath := filepath.Clean(filepath.FromSlash(relPath))
+		if cleanRelPath == "." {
+			continue
+		}
+
+		absPath := filepath.Join(root, cleanRelPath)
+		info, statErr := os.Stat(absPath)
+		if statErr != nil {
+			if os.IsNotExist(statErr) {
+				continue
+			}
+			return nil, fmt.Errorf("failed to stat file %s listed by git: %v", absPath, statErr)
+		}
+		if info.IsDir() {
+			continue
+		}
+
+		relPaths = append(relPaths, filepath.ToSlash(cleanRelPath))
+	}
+
+	if len(relPaths) == 0 {
+		return nil, fmt.Errorf("no files found under root %s after applying gitignore rules", root)
+	}
+
+	return relPaths, nil
+}
+
+func GetDefaultExportMappingPaths(exclude []string) (map[string]string, error) {
+	allFiles, err := GetAllRootFilesExcludeIgnore()
+	if err != nil {
+		return nil, err
+	}
+
+	allFilteredFiles := datautil.Filter(allFiles, func(e string) (string, bool) {
+		if util.MatchAnyFilepathGlob(e, exclude) {
+			return "", false
+		}
+		return e, true
+	})
+
+	return EnsureRootRelPaths(allFilteredFiles...)
 }

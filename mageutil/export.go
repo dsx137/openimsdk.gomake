@@ -1,17 +1,12 @@
 package mageutil
 
 import (
-	"archive/tar"
-	"compress/gzip"
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/openimsdk/gomake/internal/util"
-	"github.com/openimsdk/tools/utils/datautil"
 )
 
 type ExportOptions struct {
@@ -42,12 +37,6 @@ func ExportMageLauncherArchived(overrideMappingPaths map[string]string, exportOp
 	exportDir := Paths.OutputExport
 	PrintBlue(fmt.Sprintf("Using tmp directory: %s", tmpDir))
 	PrintBlue(fmt.Sprintf("Using export directory: %s", exportDir))
-	if err := os.MkdirAll(tmpDir, 0755); err != nil {
-		return fmt.Errorf("failed to create tmp directory %s: %v", tmpDir, err)
-	}
-	if err := os.MkdirAll(exportDir, 0755); err != nil {
-		return fmt.Errorf("failed to create export directory %s: %v", exportDir, err)
-	}
 
 	platforms := os.Getenv("PLATFORMS")
 	if platforms == "" {
@@ -106,142 +95,15 @@ func ExportMageLauncherArchived(overrideMappingPaths map[string]string, exportOp
 			mappingPaths[k] = v
 		}
 
-		archiveName := exportArchiveBaseName(platform, exportOpt)
+		archiveName := fmt.Sprintf("exported_%s", platform)
+		projectName := exportOpt.GetProjectName()
+		if projectName != "" {
+			archiveName = fmt.Sprintf("exported_%s_%s", projectName, platform)
+		}
 		err = archive(filepath.Join(exportDir, archiveName), mappingPaths)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func exportArchiveBaseName(platform string, exportOpt *ExportOptions) string {
-	projectName := exportOpt.GetProjectName()
-	if projectName == "" {
-		return fmt.Sprintf("exported_%s", platform)
-	}
-	return fmt.Sprintf("exported_%s_%s", projectName, platform)
-}
-
-func archive(archivePath string, mappingPaths map[string]string) error {
-	archivePath = fmt.Sprintf("%s.tar.gz", archivePath)
-	PrintBlue(fmt.Sprintf("Creating archive: %s", archivePath))
-	archiveFile, err := os.Create(archivePath)
-	if err != nil {
-		return fmt.Errorf("failed to create archive file %s: %v", archivePath, err)
-	}
-	defer archiveFile.Close()
-	gzipWriter, err := gzip.NewWriterLevel(archiveFile, gzip.BestCompression)
-	if err != nil {
-		return fmt.Errorf("failed to create gzip writer: %v", err)
-	}
-	defer gzipWriter.Close()
-	tarWriter := tar.NewWriter(gzipWriter)
-	defer tarWriter.Close()
-
-	for in, out := range mappingPaths {
-		err := util.CheckExist(in)
-		if err != nil {
-			return err
-		}
-
-		PrintBlue(fmt.Sprintf("Adding %s to archive", in))
-		if err := util.AddToTar(tarWriter, in, out); err != nil {
-			return fmt.Errorf("failed to add %s to archive: %v", in, err)
-		}
-	}
-
-	PrintGreen(fmt.Sprintf("Archive created successfully: %s", archivePath))
-	return nil
-}
-
-func EnsureRootRelPaths(paths ...string) (map[string]string, error) {
-	root := filepath.Clean(Paths.Root)
-	if root == "" {
-		return nil, fmt.Errorf("root path is empty")
-	}
-
-	relPathMap := make(map[string]string)
-	for _, path := range paths {
-		absPath := filepath.Clean(filepath.FromSlash(path))
-		if !filepath.IsAbs(absPath) {
-			absPath = filepath.Join(root, absPath)
-		}
-
-		relPath, err := filepath.Rel(root, absPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get relative path for %s: %v", path, err)
-		}
-		relPathMap[absPath] = filepath.ToSlash(relPath)
-	}
-
-	return relPathMap, nil
-}
-
-func GetAllRootFilesExcludeIgnore() ([]string, error) {
-	root := Paths.Root
-	if root == "" {
-		return nil, fmt.Errorf("root path is empty")
-	}
-
-	cmdOutput, err := NewCmd("git").
-		WithArgs("ls-files", "-c", "--exclude-standard", "-z").
-		WithDir(root).
-		Output()
-
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return nil, fmt.Errorf("failed to list root files via git ls-files: %s", strings.TrimSpace(string(exitErr.Stderr)))
-		}
-		return nil, fmt.Errorf("failed to list root files via git ls-files: %v", err)
-	}
-
-	relPaths := make([]string, 0)
-	for _, relPath := range strings.Split(string(cmdOutput), "\x00") {
-		if relPath == "" {
-			continue
-		}
-
-		cleanRelPath := filepath.Clean(filepath.FromSlash(relPath))
-		if cleanRelPath == "." {
-			continue
-		}
-
-		absPath := filepath.Join(root, cleanRelPath)
-		info, statErr := os.Stat(absPath)
-		if statErr != nil {
-			if os.IsNotExist(statErr) {
-				continue
-			}
-			return nil, fmt.Errorf("failed to stat file %s listed by git: %v", absPath, statErr)
-		}
-		if info.IsDir() {
-			continue
-		}
-
-		relPaths = append(relPaths, filepath.ToSlash(cleanRelPath))
-	}
-
-	if len(relPaths) == 0 {
-		return nil, fmt.Errorf("no files found under root %s after applying gitignore rules", root)
-	}
-
-	return relPaths, nil
-}
-
-func GetDefaultExportMappingPaths(exclude []string) (map[string]string, error) {
-	allFiles, err := GetAllRootFilesExcludeIgnore()
-	if err != nil {
-		return nil, err
-	}
-
-	allFilteredFiles := datautil.Filter(allFiles, func(e string) (string, bool) {
-		if util.MatchAnyFilepathGlob(e, exclude) {
-			return "", false
-		}
-		return e, true
-	})
-
-	return EnsureRootRelPaths(allFilteredFiles...)
 }

@@ -30,9 +30,9 @@ func CheckProcessNames(processPath string, expectedCount int, processMap map[str
 
 	if runningCount == expectedCount {
 		return nil
-	} else {
-		return fmt.Errorf("%s expected %d processes, but %d running", processPath, expectedCount, runningCount)
 	}
+
+	return fmt.Errorf("%s expected %d processes, but %d running", processPath, expectedCount, runningCount)
 }
 
 // FetchProcesses returns a map of executable paths to their running count.

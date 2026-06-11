@@ -22,6 +22,8 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/gookit/color v1.6.1 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
+	github.com/klauspost/compress v1.17.7 // indirect
+	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect

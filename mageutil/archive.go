@@ -2,12 +2,12 @@ package mageutil
 
 import (
 	"archive/tar"
-	"compress/gzip"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/klauspost/pgzip"
 	"github.com/openimsdk/gomake/internal/util"
 )
 
@@ -31,7 +31,7 @@ func archive(archivePath string, mappingPaths map[string]string) error {
 		return fmt.Errorf("failed to create archive file %s: %v", archivePath, err)
 	}
 	defer archiveFile.Close()
-	gzipWriter, err := gzip.NewWriterLevel(archiveFile, gzip.BestCompression)
+	gzipWriter, err := pgzip.NewWriterLevel(archiveFile, pgzip.BestCompression)
 	if err != nil {
 		return fmt.Errorf("failed to create gzip writer: %v", err)
 	}
